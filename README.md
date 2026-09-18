@@ -14,7 +14,13 @@ brew install sqlite3
 
 sudo dnf install -y sqlite-devel
 
-wget -O ./zigistry.db https://huggingface.co/buckets/Zigistry/Zigistry/resolve/zigistry.db?download=true
+make download_database
 ```
 
-- ****
+- **Build and run:**
+
+```sh
+make
+./build/server
+```
+

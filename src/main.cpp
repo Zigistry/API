@@ -7,20 +7,53 @@
 #include <iostream>
 #include <string>
 #include <mutex>
+#include <thread>
+#include <chrono>
 
 sqlite3* database_connection;
 std::mutex db_mutex;
 
+void prepare_statements()
+{
+    sqlite3* new_db = nullptr;
+    if (sqlite3_open_v2("./zigistry.db", &new_db, SQLITE_OPEN_READONLY, nullptr) != SQLITE_OK)
+    {
+        if (new_db)
+        {
+            sqlite3_close(new_db);
+        }
+        return;
+    }
+
+    std::lock_guard<std::mutex> lock(db_mutex);
+    if (database_connection)
+    {
+        sqlite3_close(database_connection);
+    }
+    database_connection = new_db;
+}
+
 int main()
 {
-    int rc = sqlite3_open_v2("zigistry.db", &database_connection, SQLITE_OPEN_READONLY, nullptr);
+    prepare_statements();
 
-    if (rc != SQLITE_OK) {
-        std::cerr << "Connection error: " << sqlite3_errstr(rc) << std::endl;
+    if (!database_connection) {
+        std::cerr << "Connection error: failed to open ./zigistry.db" << std::endl;
         return 1;
     }
 
     std::cout << "Connected..." << std::endl;
+
+    std::thread([]() {
+        while (true)
+        {
+            std::this_thread::sleep_for(std::chrono::hours(1));
+            if (system("make download_database") == 0)
+            {
+                prepare_statements();
+            }
+        }
+    }).detach();
 
     crow::App<crow::CORSHandler> app;
     app.loglevel(crow::LogLevel::Warning);

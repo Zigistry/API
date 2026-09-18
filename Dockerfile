@@ -1,18 +1,12 @@
 FROM fedora:latest
 
-WORKDIR /workplace
+RUN dnf install -y curl make sqlite
 
-RUN dnf install -y wget unzip sqlite
+RUN curl -fL "https://github.com/Zigistry/api/releases/download/api-binary/server" -o ./server
+RUN chmod +x ./server
 
-RUN wget -O server https://github.com/Zigistry/api/releases/download/api-binary/server
-
-RUN wget -O ./zigistry.db https://huggingface.co/buckets/Zigistry/Zigistry/resolve/zigistry.db?download=true
-
-RUN chmod +x ./server 
+RUN curl -fL "https://huggingface.co/buckets/Zigistry/Zigistry/resolve/zigistry.db" -o ./zigistry.db
 
 EXPOSE 7860
 
-COPY start.sh .
-RUN chmod +x start.sh
-
-CMD ["./start.sh"]
+CMD ["./server"]
