@@ -9,9 +9,17 @@
 #include <mutex>
 #include <thread>
 #include <chrono>
+#include <filesystem>
 
 sqlite3* database_connection;
 std::mutex db_mutex;
+
+bool download_database()
+{
+    std::cout << "Downloading database..." << std::endl;
+    int ret = system("wget -q -O ./zigistry.db.tmp \"https://huggingface.co/buckets/Zigistry/Zigistry/resolve/zigistry.db\" && mv ./zigistry.db.tmp ./zigistry.db");
+    return ret == 0;
+}
 
 void prepare_statements()
 {
@@ -35,6 +43,11 @@ void prepare_statements()
 
 int main()
 {
+    if (!std::filesystem::exists("./zigistry.db"))
+    {
+        download_database();
+    }
+
     prepare_statements();
 
     if (!database_connection) {
@@ -48,7 +61,7 @@ int main()
         while (true)
         {
             std::this_thread::sleep_for(std::chrono::hours(1));
-            if (system("make download_database") == 0)
+            if (download_database())
             {
                 prepare_statements();
             }

@@ -1,13 +1,20 @@
-FROM --platform=linux/amd64 amd64/fedora:latest
+FROM --platform=amd64 amd64/alpine:latest AS builder
 
-RUN dnf install -y curl make sqlite
+RUN apk add --no-cache make sqlite-dev g++ asio-dev
 
-RUN curl -fL "https://github.com/Zigistry/api/releases/download/api-binary/server" -o ./server
+WORKDIR /app
+COPY . .
 
-RUN curl -fL "https://huggingface.co/buckets/Zigistry/Zigistry/resolve/zigistry.db" -o ./zigistry.db
+RUN make
+RUN strip build/server
 
-RUN chmod +x ./server
+FROM --platform=amd64 amd64/alpine:latest
+
+RUN apk add --no-cache wget ca-certificates sqlite-libs libstdc++
+
+WORKDIR /app
+COPY --from=builder /app/build/server ./build/server
 
 EXPOSE 7860
 
-CMD ["./server"]
+CMD ["./build/server"]
