@@ -14,11 +14,11 @@ const std::unordered_map<std::string, std::string> sort_to_sql = {
     { "zig_version", "we.minimum_zig_version" }
 };
 
-std::string sorting_parameter_adder_to_query(const char* raw_sort, const char* raw_dir)
+std::string sorting_parameter_adder_to_query(const char* raw_sort, const char* raw_dir, const std::string& raw_query = "")
 {
     std::string sort = raw_sort ? raw_sort : "intelligent";
     std::string dir = raw_dir ? raw_dir : "desc";
-    
+
     if (dir != "asc") {
         dir = "desc";
     }
@@ -32,9 +32,44 @@ std::string sorting_parameter_adder_to_query(const char* raw_sort, const char* r
     }
 
     if (sort == "intelligent") {
-        return "";
-    }
+        size_t start = raw_query.find_first_not_of(" *");
+        size_t end = raw_query.find_last_not_of(" *");
+        std::string clean_query = (start == std::string::npos) ? "" : raw_query.substr(start, end - start + 1);
 
+        if (clean_query.empty()) {
+            return "";
+        }
+
+        std::string pattern_safe;
+        for (char c : clean_query) {
+            // I am Parsing the query to escape any
+            // escaping characters itself.
+            if (c == '\\' || c == '%' || c == '_') {
+                pattern_safe += '\\';
+            }
+            pattern_safe += c;
+        }
+
+        char* formatted = sqlite3_mprintf("%q", pattern_safe.c_str());
+        std::string escaped_query = formatted ? formatted : "";
+        sqlite3_free(formatted);
+
+        return std::format(R"""(
+
+            ORDER BY (
+                CASE 
+                    WHEN r.id LIKE '%/%/{0}' ESCAPE '\' THEN 10000 
+                    WHEN r.id LIKE '%/%/%{0}%' ESCAPE '\' THEN 4000 
+                    ELSE 0 
+                END 
+                + CASE WHEN COALESCE(r.description, '') LIKE '%{0}%' ESCAPE '\' THEN 200 ELSE 0 END 
+                + r.stargazer_count 
+                - (CASE WHEN r.is_archived = 1 THEN 500 ELSE 0 END) 
+                - (CASE WHEN r.is_fork = 1 THEN 500 ELSE 0 END)
+            ) DESC, r.id ASC
+
+        )""", escaped_query);
+    }
 
     if (!sort_to_sql.contains(sort)) {
         return "";
@@ -89,7 +124,7 @@ crow::response search(const crow::request& req, const std::string query_str)
     }
     const unsigned long offset = (page - 1) * per_page;
 
-    std::string order_clause = sorting_parameter_adder_to_query(raw_sort, raw_dir);
+    std::string order_clause = sorting_parameter_adder_to_query(raw_sort, raw_dir, has_search_query ? raw_search_query : "");
 
     std::string fts_filter = has_search_query
         ? "AND r.id IN (SELECT repo_id FROM repo_search WHERE keywords MATCH ?)"
