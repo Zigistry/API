@@ -13,7 +13,7 @@ $(TARGET): $(SRC)
 build: $(TARGET)
 
 download_database:
-	wget -q -O ./zigistry.db "https://huggingface.co/buckets/Zigistry/Zigistry/resolve/zigistry.db"
+	wget -q -O ./zigistry.db "https://github.com/Zigistry/database/releases/download/database/zigistry.db"
 
 build_docker:
 	docker-buildx build --platform linux/amd64 --no-cache -t rohanvashisht1234/zigistry-api .

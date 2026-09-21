@@ -17,7 +17,7 @@ std::mutex db_mutex;
 bool download_database()
 {
     std::cout << "Downloading database..." << std::endl;
-    int ret = system("wget -q -O ./zigistry.db.tmp \"https://huggingface.co/buckets/Zigistry/Zigistry/resolve/zigistry.db\" && mv ./zigistry.db.tmp ./zigistry.db");
+    int ret = system("wget -q -O ./zigistry.db.tmp \"https://github.com/Zigistry/database/releases/download/database/zigistry.db\" && mv ./zigistry.db.tmp ./zigistry.db");
     return ret == 0;
 }
 
