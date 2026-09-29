@@ -1,9 +1,11 @@
+#pragma once
 #include <iostream>
 #include <mutex>
 #include <sqlite3.h>
+#include <string>
+#include <expected>
 
 #include "../../include/crow_all.h"
-#include <expected>
 
 extern std::mutex db_mutex;
 extern sqlite3* database_connection;
@@ -15,94 +17,31 @@ std::string get_row_text(sqlite3_stmt* stmt, int col);
 std::string adv_tokenizer(std::string s, char del, int index);
 std::expected<crow::json::wvalue, std::string> special_parsing(std::string query);
 
+bool create_indexes(sqlite3* db);
+bool create_indexes(const std::string& db_path = "./zigistry.db");
 
 const std::string search_packages_database_query = R"""(
             WITH filtered AS MATERIALIZED (
                 SELECT r.id
                 FROM repos r
                 WHERE r.is_disabled = 0
-                  AND EXISTS (SELECT 1 FROM packages p WHERE p.repo_id = r.id)
+                  AND r.is_package = 1
                   __INSERT_FTS_FILTER_HERE__
                   __INSERT_TOPIC_FILTER_HERE__
             ),
-            with_extras AS MATERIALIZED (
+            we AS MATERIALIZED (
                 SELECT
-                    f.id,
-                    rel.minimum_zig_version,
-                    COALESCE(dep.dependents_count, 0) AS dependents_count
-                FROM filtered f
-                LEFT JOIN releases rel ON rel.repo_id = f.id
-                    AND rel.version = '__ZIGISTRY__DEFAULT__BRANCH__'
-                LEFT JOIN (
-                    SELECT repo_id, COUNT(*) AS dependents_count
-                    FROM repo_dependents
-                    GROUP BY repo_id
-                ) dep ON dep.repo_id = f.id
-            )
-            SELECT
-                r.id, u.avatar_id, r.owner, r.platform, r.description,
-                r.issues_count, r.default_branch_name, r.fork_count,
-                r.stargazer_count, r.watchers_count, r.pushed_at, r.created_at,
-                r.is_archived, r.is_disabled, r.is_fork, r.license,
-                r.primary_language,
-                we.minimum_zig_version,
-                we.dependents_count,
-                (SELECT COUNT(*) FROM filtered) AS total_results
-            FROM with_extras we
-            JOIN repos r ON r.id = we.id
-            LEFT JOIN users u ON u.id = r.owner
-            __INSERT_SORT_HERE__
-            LIMIT ? OFFSET ?
-    )""";
-
-const std::string search_programs_database_query = R"""(
-            WITH filtered AS MATERIALIZED (
-                SELECT r.id
+                    r.id,
+                    r.minimum_zig_version,
+                    r.dependents_count
                 FROM repos r
-                WHERE r.is_disabled = 0
-                  AND EXISTS (SELECT 1 FROM programs p WHERE p.repo_id = r.id)
-                  __INSERT_FTS_FILTER_HERE__
-                  __INSERT_TOPIC_FILTER_HERE__
-            ),
-            with_extras AS MATERIALIZED (
-                SELECT
-                    f.id,
-                    rel.minimum_zig_version,
-                    COALESCE(dep.dependents_count, 0) AS dependents_count
-                FROM filtered f
-                LEFT JOIN releases rel ON rel.repo_id = f.id
-                    AND rel.version = '__ZIGISTRY__DEFAULT__BRANCH__'
-                LEFT JOIN (
-                    SELECT repo_id, COUNT(*) AS dependents_count
-                    FROM repo_dependents
-                    GROUP BY repo_id
-                ) dep ON dep.repo_id = f.id
+                JOIN filtered f ON f.id = r.id
             )
-            SELECT
-                r.id, u.avatar_id, r.owner, r.platform, r.description,
-                r.issues_count, r.default_branch_name, r.fork_count,
-                r.stargazer_count, r.watchers_count, r.pushed_at, r.created_at,
-                r.is_archived, r.is_disabled, r.is_fork, r.license,
-                r.primary_language,
-                we.minimum_zig_version,
-                we.dependents_count,
-                (SELECT COUNT(*) FROM filtered) AS total_results
-            FROM with_extras we
-            JOIN repos r ON r.id = we.id
-            LEFT JOIN users u ON u.id = r.owner
-            __INSERT_SORT_HERE__
-            LIMIT ? OFFSET ?
-    )""";
-
-const std::string infinite_scroll_packages_query = R"""(
-    
-
-        WITH repo_data AS (
             SELECT
                 r.id,
-                u.avatar_id,
+                r.owner_avatar_id AS avatar_id,
                 r.owner,
-                r.platform,
+                r.platform_id AS platform,
                 r.description,
                 r.issues_count,
                 r.default_branch_name,
@@ -116,81 +55,115 @@ const std::string infinite_scroll_packages_query = R"""(
                 r.is_fork,
                 r.license,
                 r.primary_language,
-                (
-                    SELECT minimum_zig_version
-                    FROM releases
-                    WHERE repo_id = r.id
-                    ORDER BY published_at DESC
-                    LIMIT 1
-                ) AS minimum_zig_version
-            FROM repos r
-            LEFT JOIN users u ON r.owner = u.id
-            INNER JOIN packages pkg ON r.id = pkg.repo_id
-            LEFT JOIN programs prog ON r.id = prog.repo_id
-            WHERE
-                r.is_disabled = 0
-            ORDER BY r.stargazer_count DESC, r.id ASC
+                r.minimum_zig_version,
+                r.dependents_count,
+                (SELECT COUNT(*) FROM filtered) AS total_results
+            FROM filtered f
+            JOIN repos r ON r.id = f.id
+            LEFT JOIN we ON we.id = r.id
+            __INSERT_SORT_HERE__
             LIMIT ? OFFSET ?
-        )
-        SELECT
-            rd.*,
-            (
-                SELECT COUNT(*)
-                FROM repo_dependents
-                WHERE repo_id = rd.id
-            ) AS dependents_count
-        FROM repo_data rd;
+    )""";
 
-            
+const std::string search_programs_database_query = R"""(
+            WITH filtered AS MATERIALIZED (
+                SELECT r.id
+                FROM repos r
+                WHERE r.is_disabled = 0
+                  AND r.is_program = 1
+                  __INSERT_FTS_FILTER_HERE__
+                  __INSERT_TOPIC_FILTER_HERE__
+            ),
+            we AS MATERIALIZED (
+                SELECT
+                    r.id,
+                    r.minimum_zig_version,
+                    r.dependents_count
+                FROM repos r
+                JOIN filtered f ON f.id = r.id
+            )
+            SELECT
+                r.id,
+                r.owner_avatar_id AS avatar_id,
+                r.owner,
+                r.platform_id AS platform,
+                r.description,
+                r.issues_count,
+                r.default_branch_name,
+                r.fork_count,
+                r.stargazer_count,
+                r.watchers_count,
+                r.pushed_at,
+                r.created_at,
+                r.is_archived,
+                r.is_disabled,
+                r.is_fork,
+                r.license,
+                r.primary_language,
+                r.minimum_zig_version,
+                r.dependents_count,
+                (SELECT COUNT(*) FROM filtered) AS total_results
+            FROM filtered f
+            JOIN repos r ON r.id = f.id
+            LEFT JOIN we ON we.id = r.id
+            __INSERT_SORT_HERE__
+            LIMIT ? OFFSET ?
+    )""";
+
+const std::string infinite_scroll_packages_query = R"""(
+        SELECT
+            r.id,
+            r.owner_avatar_id AS avatar_id,
+            r.owner,
+            r.platform_id AS platform,
+            r.description,
+            r.issues_count,
+            r.default_branch_name,
+            r.fork_count,
+            r.stargazer_count,
+            r.watchers_count,
+            r.pushed_at,
+            r.created_at,
+            r.is_archived,
+            r.is_disabled,
+            r.is_fork,
+            r.license,
+            r.primary_language,
+            r.minimum_zig_version,
+            r.dependents_count
+        FROM repos r
+        WHERE
+            r.is_disabled = 0
+            AND r.is_package = 1
+        ORDER BY r.stargazer_count DESC, r.id ASC
+        LIMIT ? OFFSET ?;
 )""";
 
 const std::string infinite_scroll_programs_query = R"""(
-
-
-            WITH repo_data AS (
-                SELECT
-                    r.id,
-                    u.avatar_id,
-                    r.owner,
-                    r.platform,
-                    r.description,
-                    r.issues_count,
-                    r.default_branch_name,
-                    r.fork_count,
-                    r.stargazer_count,
-                    r.watchers_count,
-                    r.pushed_at,
-                    r.created_at,
-                    r.is_archived,
-                    r.is_disabled,
-                    r.is_fork,
-                    r.license,
-                    r.primary_language,
-                    (
-                        SELECT minimum_zig_version
-                        FROM releases
-                        WHERE repo_id = r.id
-                        ORDER BY published_at DESC
-                        LIMIT 1
-                    ) AS minimum_zig_version
-                FROM repos r
-                LEFT JOIN users u ON r.owner = u.id
-                LEFT JOIN packages pkg ON r.id = pkg.repo_id
-                LEFT JOIN programs prog ON r.id = prog.repo_id
-                WHERE
-                    r.is_disabled = 0
-                    AND prog.repo_id IS NOT NULL
-                ORDER BY r.stargazer_count DESC, r.id ASC
-                LIMIT ? OFFSET ?
-            )
-            SELECT
-                rd.*,
-                (
-                    SELECT COUNT(*)
-                    FROM repo_dependents
-                    WHERE repo_id = rd.id
-                ) AS dependents_count
-            FROM repo_data rd;        
-
-            
-    )""";
+        SELECT
+            r.id,
+            r.owner_avatar_id AS avatar_id,
+            r.owner,
+            r.platform_id AS platform,
+            r.description,
+            r.issues_count,
+            r.default_branch_name,
+            r.fork_count,
+            r.stargazer_count,
+            r.watchers_count,
+            r.pushed_at,
+            r.created_at,
+            r.is_archived,
+            r.is_disabled,
+            r.is_fork,
+            r.license,
+            r.primary_language,
+            r.minimum_zig_version,
+            r.dependents_count
+        FROM repos r
+        WHERE
+            r.is_disabled = 0
+            AND r.is_program = 1
+        ORDER BY r.stargazer_count DESC, r.id ASC
+        LIMIT ? OFFSET ?;
+)""";

@@ -17,7 +17,21 @@ std::mutex db_mutex;
 bool download_database()
 {
     std::cout << "Downloading database..." << std::endl;
-    int ret = system("wget -q -O ./zigistry.db.tmp \"https://github.com/Zigistry/database/releases/download/database/zigistry.db\" && mv ./zigistry.db.tmp ./zigistry.db");
+    int ret = system("wget -q -O ./zigistry.db.tmp \"https://github.com/Zigistry/Indexer/releases/download/database/zigistry.db\"");
+    if (ret != 0)
+    {
+        std::cerr << "Failed to download database" << std::endl;
+        return false;
+    }
+
+    std::cout << "creating indexes" << std::endl;
+    if (!create_indexes("./zigistry.db.tmp"))
+    {
+        std::cerr << "creating index didn't work" << std::endl;
+        return false;
+    }
+
+    ret = system("mv ./zigistry.db.tmp ./zigistry.db");
     return ret == 0;
 }
 
@@ -46,6 +60,10 @@ int main()
     if (!std::filesystem::exists("./zigistry.db"))
     {
         download_database();
+    }
+    else
+    {
+        create_indexes("./zigistry.db");
     }
 
     prepare_statements();
