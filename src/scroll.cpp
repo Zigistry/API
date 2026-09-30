@@ -92,8 +92,8 @@ crow::response infinite_scroll(const crow::request& req, const std::string query
 
         std::string provider = get_row_text(query_stmt, 3);
         item["description"] = get_row_text(query_stmt, 4);
-        item["platform"] = get_row_text(query_stmt, 3);
-        item["provider"] = provider == "github" ? "gh" : "cb";
+        item["platform"] = provider;
+        item["provider"] = (provider == "github" || provider == "gh") ? "gh" : "cb";
         item["issues_count"] = GET_ROW_UL(query_stmt, 5);
         item["default_branch_name"] = get_row_text(query_stmt, 6);
         item["fork_count"] = GET_ROW_UL(query_stmt, 7);

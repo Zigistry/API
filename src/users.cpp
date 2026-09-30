@@ -21,7 +21,7 @@ crow::response get_user_route(const crow::request& req)
     sqlite3_stmt* fetch_user_stmt = nullptr;
     int rc = sqlite3_prepare_v2(
         database_connection,
-        "SELECT id, avatar_id, platform, bio FROM users WHERE id = ?",
+        "SELECT id, avatar_id, platform_id, bio FROM users WHERE id = ?",
         -1,
         &fetch_user_stmt,
         nullptr);
@@ -74,9 +74,9 @@ crow::response get_user_route(const crow::request& req)
 
         SELECT
             r.id,
-            u.avatar_id,
+            r.owner_avatar_id AS avatar_id,
             r.owner,
-            r.platform,
+            r.platform_id AS platform,
             r.description,
             r.issues_count,
             r.default_branch_name,
@@ -90,24 +90,11 @@ crow::response get_user_route(const crow::request& req)
             r.is_fork,
             r.license,
             r.primary_language,
-            (
-                SELECT minimum_zig_version
-                FROM releases
-                WHERE repo_id = r.id
-                ORDER BY published_at DESC
-                LIMIT 1
-            ) AS minimum_zig_version,
-            (
-                SELECT COUNT(*)
-                FROM repo_dependents
-                WHERE repo_id = r.id
-            ) AS dependents_count,
-            (CASE WHEN pkg.repo_id IS NOT NULL THEN 1 ELSE 0 END) AS is_package,
-            (CASE WHEN prog.repo_id IS NOT NULL THEN 1 ELSE 0 END) AS is_program
+            r.minimum_zig_version,
+            r.dependents_count,
+            r.is_package,
+            r.is_program
         FROM repos r
-        LEFT JOIN users u ON r.owner = u.id
-        LEFT JOIN packages pkg ON r.id = pkg.repo_id
-        LEFT JOIN programs prog ON r.id = prog.repo_id
         WHERE r.owner = ? AND r.is_disabled = 0
         ORDER BY r.stargazer_count DESC;
 
@@ -170,10 +157,10 @@ crow::response get_user_route(const crow::request& req)
         item["owner"] = get_row_text(fetch_user_repos_query_stmt, 2);
 
         item["repo_name"] = adv_tokenizer(id, '/', 2);
-        item["provider"] = provider == "github" ? "gh" : "cb";
+        item["provider"] = (provider == "github" || provider == "gh") ? "gh" : "cb";
 
         item["description"] = get_row_text(fetch_user_repos_query_stmt, 4);
-        item["platform"] = get_row_text(fetch_user_repos_query_stmt, 3);
+        item["platform"] = provider;
         item["issues_count"] = GET_ROW_UL(fetch_user_repos_query_stmt, 5);
         item["default_branch_name"] = get_row_text(fetch_user_repos_query_stmt, 6);
         item["fork_count"] = GET_ROW_UL(fetch_user_repos_query_stmt, 7);

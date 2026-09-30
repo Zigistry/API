@@ -5,13 +5,13 @@ extern sqlite3* database_connection;
 
 const std::unordered_map<std::string, std::string> sort_to_sql = {
     { "stars", "r.stargazer_count" },
-    { "dependents", "we.dependents_count" },
+    { "dependents", "r.dependents_count" },
     { "recently_updated", "r.pushed_at" },
     { "newly_added", "r.created_at" },
     { "name", "r.id" },
     { "forks", "r.fork_count" },
     { "issues", "r.issues_count" },
-    { "zig_version", "we.minimum_zig_version" }
+    { "zig_version", "r.minimum_zig_version" }
 };
 
 std::string sorting_parameter_adder_to_query(const char* raw_sort, const char* raw_dir, const std::string& raw_query = "")
@@ -231,16 +231,15 @@ crow::response search(const crow::request& req, const std::string query_str)
 
         std::string provider = get_row_text(query_stmt, 3);
 
-        item["id"] = get_row_text(query_stmt, 0);
         item["avatar_url"] = get_row_text(query_stmt, 1);
         item["owner_name"] = get_row_text(query_stmt, 2);
         item["owner"] = get_row_text(query_stmt, 2);
 
         item["repo_name"] = adv_tokenizer(id, '/', 2);
-        item["provider"] = provider == "github" ? "gh" : "cb";
+        item["provider"] = (provider == "github" || provider == "gh") ? "gh" : "cb";
 
         item["description"] = get_row_text(query_stmt, 4);
-        item["platform"] = get_row_text(query_stmt, 3);
+        item["platform"] = provider;
         item["issues_count"] = GET_ROW_UL(query_stmt, 5);
         item["default_branch_name"] = get_row_text(query_stmt, 6);
         item["fork_count"] = GET_ROW_UL(query_stmt, 7);
