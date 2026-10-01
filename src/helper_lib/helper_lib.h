@@ -28,14 +28,6 @@ const std::string search_packages_database_query = R"""(
                   AND r.is_package = 1
                   __INSERT_FTS_FILTER_HERE__
                   __INSERT_TOPIC_FILTER_HERE__
-            ),
-            we AS MATERIALIZED (
-                SELECT
-                    r.id,
-                    r.minimum_zig_version,
-                    r.dependents_count
-                FROM repos r
-                JOIN filtered f ON f.id = r.id
             )
             SELECT
                 r.id,
@@ -60,7 +52,6 @@ const std::string search_packages_database_query = R"""(
                 (SELECT COUNT(*) FROM filtered) AS total_results
             FROM filtered f
             JOIN repos r ON r.id = f.id
-            LEFT JOIN we ON we.id = r.id
             __INSERT_SORT_HERE__
             LIMIT ? OFFSET ?
     )""";
@@ -73,14 +64,6 @@ const std::string search_programs_database_query = R"""(
                   AND r.is_program = 1
                   __INSERT_FTS_FILTER_HERE__
                   __INSERT_TOPIC_FILTER_HERE__
-            ),
-            we AS MATERIALIZED (
-                SELECT
-                    r.id,
-                    r.minimum_zig_version,
-                    r.dependents_count
-                FROM repos r
-                JOIN filtered f ON f.id = r.id
             )
             SELECT
                 r.id,
@@ -105,7 +88,6 @@ const std::string search_programs_database_query = R"""(
                 (SELECT COUNT(*) FROM filtered) AS total_results
             FROM filtered f
             JOIN repos r ON r.id = f.id
-            LEFT JOIN we ON we.id = r.id
             __INSERT_SORT_HERE__
             LIMIT ? OFFSET ?
     )""";

@@ -21,9 +21,9 @@ crow::response package_details(const crow::request& req)
     const std::string repo_query = R"(
         SELECT
             r.id,
-            u.avatar_id,
+            r.owner_avatar_id AS avatar_id,
             r.owner,
-            r.platform,
+            r.platform_id AS platform,
             r.description,
             r.issues_count,
             r.default_branch_name,
@@ -38,7 +38,6 @@ crow::response package_details(const crow::request& req)
             r.license,
             r.primary_language
         FROM repos r
-        LEFT JOIN users u ON r.owner = u.id
         WHERE r.id = ?
         LIMIT 1
     )";
@@ -121,7 +120,7 @@ crow::response package_details(const crow::request& req)
         crow::json::wvalue::list dependents;
 
         const std::string dependents_query = R"(
-            SELECT dependent
+            SELECT dependent_repo_id
             FROM repo_dependents
             WHERE repo_id = ?
         )";
@@ -148,13 +147,11 @@ crow::response package_details(const crow::request& req)
     if (has_version) {
         release_query = R"(
             SELECT
-                id,
                 version,
                 published_at,
                 minimum_zig_version,
                 readme_url,
-                is_prerelease,
-                directory_files
+                is_prerelease
             FROM releases
             WHERE repo_id = ?
             AND version = ?
@@ -163,13 +160,11 @@ crow::response package_details(const crow::request& req)
     } else {
         release_query = R"(
             SELECT
-                id,
                 version,
                 published_at,
                 minimum_zig_version,
                 readme_url,
-                is_prerelease,
-                directory_files
+                is_prerelease
             FROM releases
             WHERE repo_id = ?
             ORDER BY published_at DESC
@@ -190,21 +185,21 @@ crow::response package_details(const crow::request& req)
 
     if (!release_row_empty) {
 
-        long release_id = GET_ROW_UL(stmt4, 0);
+        std::string rel_version = get_row_text(stmt4, 0);
 
-        response["version"] = has_version ? get_row_text(stmt4, 1) : "0.0.0";
+        response["version"] = has_version ? rel_version : "0.0.0";
 
-        response["latest_version"] = has_version ? "" : get_row_text(stmt4, 1);
+        response["latest_version"] = has_version ? "" : rel_version;
 
-        response["published_at"] = get_row_text(stmt4, 2);
+        response["published_at"] = get_row_text(stmt4, 1);
 
-        auto min_zig = get_row_text(stmt4, 3);
+        auto min_zig = get_row_text(stmt4, 2);
 
         response["minimum_zig_version"] = min_zig.empty() ? "0.0.0" : min_zig;
 
-        response["readme_url"] = get_row_text(stmt4, 4);
-        response["is_prerelease"] = GET_ROW_UL(stmt4, 5) != 0;
-        response["directory_files"] = get_row_text(stmt4, 6);
+        response["readme_url"] = get_row_text(stmt4, 3);
+        response["is_prerelease"] = GET_ROW_BOOL(stmt4, 4);
+        response["directory_files"] = "";
 
         crow::json::wvalue::list deps;
 
@@ -216,12 +211,13 @@ crow::response package_details(const crow::request& req)
                 is_lazy,
                 path
             FROM release_dependencies
-            WHERE release_id = ?
+            WHERE repo_id = ? AND version = ?
         )";
 
         sqlite3_stmt* stmt5 = nullptr;
         sqlite3_prepare_v2(database_connection, dep_query.c_str(), -1, &stmt5, nullptr);
-        sqlite3_bind_int64(stmt5, 1, release_id);
+        sqlite3_bind_text(stmt5, 1, repo_id, strlen(repo_id), SQLITE_TRANSIENT);
+        sqlite3_bind_text(stmt5, 2, rel_version.c_str(), rel_version.length(), SQLITE_TRANSIENT);
 
         while (true) {
             int r = sqlite3_step(stmt5);
@@ -234,7 +230,7 @@ crow::response package_details(const crow::request& req)
             dep["name"] = get_row_text(stmt5, 0);
             dep["url"] = get_row_text(stmt5, 1);
             dep["hash"] = get_row_text(stmt5, 2);
-            dep["lazy"] = GET_ROW_UL(stmt5, 3) != 0;
+            dep["lazy"] = GET_ROW_BOOL(stmt5, 3);
             dep["path"] = get_row_text(stmt5, 4);
 
             deps.push_back(std::move(dep));

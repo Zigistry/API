@@ -4,144 +4,87 @@
 crow::response programIndexDetails(const crow::request& req)
 {
     const std::string get_latest_repos_query = R"""(
-
-
-               WITH repo_data AS (
-                    SELECT
-                        r.id,
-                        u.avatar_id,
-                        r.owner,
-                        r.platform,
-                        r.description,
-                        r.issues_count,
-                        r.default_branch_name,
-                        r.fork_count,
-                        r.stargazer_count,
-                        r.watchers_count,
-                        r.pushed_at,
-                        r.created_at,
-                        r.is_archived,
-                        r.is_disabled,
-                        r.is_fork,
-                        r.license,
-                        r.primary_language,
-                        (
-                            SELECT minimum_zig_version
-                            FROM releases
-                            WHERE repo_id = r.id
-                            ORDER BY published_at DESC
-                            LIMIT 1
-                        ) AS minimum_zig_version
-                    FROM repos r
-                    LEFT JOIN users u ON r.owner = u.id
-                    LEFT JOIN packages pkg ON r.id = pkg.repo_id
-                    LEFT JOIN programs prog ON r.id = prog.repo_id
-                    WHERE
-                        r.is_disabled = 0
-                        AND prog.repo_id IS NOT NULL
-                    ORDER BY r.created_at DESC
-                    LIMIT 10
-                )
-                SELECT
-                    rd.*,
-                    (SELECT COUNT(*) FROM repo_dependents WHERE repo_id = rd.id) AS dependents_count
-                FROM repo_data rd
-
-    )""";
-
-    // This is from the infinite scroll.
-    const std::string get_most_used_repos_query = R"""(
-
-
-        WITH repo_data AS (
         SELECT
-                r.id,
-                u.avatar_id,
-                r.owner,
-                r.platform,
-                r.description,
-                r.issues_count,
-                r.default_branch_name,
-                r.fork_count,
-                r.stargazer_count,
-                r.watchers_count,
-                r.pushed_at,
-                r.created_at,
-                r.is_archived,
-                r.is_disabled,
-                r.is_fork,
-                r.license,
-                r.primary_language,
-                (
-                    SELECT minimum_zig_version
-                    FROM releases
-                    WHERE repo_id = r.id
-                    ORDER BY published_at DESC
-                    LIMIT 1
-                ) AS minimum_zig_version
+            r.id,
+            r.owner_avatar_id AS avatar_id,
+            r.owner,
+            r.platform_id AS platform,
+            r.description,
+            r.issues_count,
+            r.default_branch_name,
+            r.fork_count,
+            r.stargazer_count,
+            r.watchers_count,
+            r.pushed_at,
+            r.created_at,
+            r.is_archived,
+            r.is_disabled,
+            r.is_fork,
+            r.license,
+            r.primary_language,
+            r.minimum_zig_version,
+            r.dependents_count
         FROM repos r
-        LEFT JOIN users u ON r.owner = u.id
-        LEFT JOIN packages pkg ON r.id = pkg.repo_id
-        LEFT JOIN programs prog ON r.id = prog.repo_id
-        WHERE
-            r.is_disabled = 0
-            AND prog.repo_id IS NOT NULL
-        ORDER BY r.stargazer_count DESC, r.id ASC
-        LIMIT 10 OFFSET 0
-        )
-        SELECT
-            rd.*,
-            (SELECT COUNT(*) FROM repo_dependents WHERE repo_id = rd.id) AS dependents_count
-        FROM repo_data rd
-
+        WHERE r.is_disabled = 0
+          AND r.is_program = 1
+        ORDER BY r.created_at DESC, r.id ASC
+        LIMIT 10;
     )""";
 
+    const std::string get_most_used_repos_query = R"""(
+        SELECT
+            r.id,
+            r.owner_avatar_id AS avatar_id,
+            r.owner,
+            r.platform_id AS platform,
+            r.description,
+            r.issues_count,
+            r.default_branch_name,
+            r.fork_count,
+            r.stargazer_count,
+            r.watchers_count,
+            r.pushed_at,
+            r.created_at,
+            r.is_archived,
+            r.is_disabled,
+            r.is_fork,
+            r.license,
+            r.primary_language,
+            r.minimum_zig_version,
+            r.dependents_count
+        FROM repos r
+        WHERE r.is_disabled = 0
+          AND r.is_program = 1
+        ORDER BY r.stargazer_count DESC, r.id ASC
+        LIMIT 10 OFFSET 0;
+    )""";
 
     const std::string get_recently_updated_repos_query = R"""(
-
-
-        WITH repo_data AS (
-            SELECT
-                r.id,
-                u.avatar_id,
-                r.owner,
-                r.platform,
-                r.description,
-                r.issues_count,
-                r.default_branch_name,
-                r.fork_count,
-                r.stargazer_count,
-                r.watchers_count,
-                r.pushed_at,
-                r.created_at,
-                r.is_archived,
-                r.is_disabled,
-                r.is_fork,
-                r.license,
-                r.primary_language,
-                (
-                    SELECT minimum_zig_version
-                    FROM releases
-                    WHERE repo_id = r.id
-                    ORDER BY published_at DESC
-                    LIMIT 1
-                ) AS minimum_zig_version
-            FROM repos r
-            LEFT JOIN users u ON r.owner = u.id
-            LEFT JOIN packages pkg ON r.id = pkg.repo_id
-            LEFT JOIN programs prog ON r.id = prog.repo_id
-            WHERE
-                r.is_disabled = 0
-                AND prog.repo_id IS NOT NULL
-            ORDER BY r.pushed_at DESC
-            LIMIT 10
-        )
         SELECT
-            rd.*,
-            (SELECT COUNT(*) FROM repo_dependents WHERE repo_id = rd.id) AS dependents_count
-        FROM repo_data rd
-
-
+            r.id,
+            r.owner_avatar_id AS avatar_id,
+            r.owner,
+            r.platform_id AS platform,
+            r.description,
+            r.issues_count,
+            r.default_branch_name,
+            r.fork_count,
+            r.stargazer_count,
+            r.watchers_count,
+            r.pushed_at,
+            r.created_at,
+            r.is_archived,
+            r.is_disabled,
+            r.is_fork,
+            r.license,
+            r.primary_language,
+            r.minimum_zig_version,
+            r.dependents_count
+        FROM repos r
+        WHERE r.is_disabled = 0
+          AND r.is_program = 1
+        ORDER BY r.pushed_at DESC, r.id ASC
+        LIMIT 10;
     )""";
 
     auto latest_repositories = special_parsing(get_latest_repos_query);
@@ -162,5 +105,3 @@ crow::response programIndexDetails(const crow::request& req)
         return crow::response(error_responce);
     }
 }
-
-
